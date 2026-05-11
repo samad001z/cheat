@@ -11,6 +11,7 @@ export default function App() {
   const [permission, requestPermission] = useCameraPermissions();
   const [loading, setLoading] = useState(false);
   const [answer, setAnswer] = useState(null);
+  const [zoom, setZoom] = useState(0);
   const cameraRef = useRef(null);
 
   // Animations
@@ -114,6 +115,19 @@ export default function App() {
     setAnswer(null);
   };
 
+  const toggleZoom = () => {
+    triggerHaptic('heavy');
+    if (zoom === 0) setZoom(0.05); // ~2x
+    else if (zoom === 0.05) setZoom(0.12); // ~3x
+    else setZoom(0); // 1x
+  };
+
+  const getZoomLabel = () => {
+    if (zoom === 0) return '1x';
+    if (zoom === 0.05) return '2x';
+    return '3x';
+  };
+
   // Scanner Corners UI Component
   const Corner = ({ top, bottom, left, right }) => (
     <View style={[
@@ -127,7 +141,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <CameraView style={styles.camera} facing="back" autofocus="on" ref={cameraRef}>
+      <CameraView style={styles.camera} facing="back" autofocus="on" zoom={zoom} ref={cameraRef}>
         
         {/* Darkened Overlay around the Scan Box */}
         <View style={styles.overlayContainer}>
@@ -182,11 +196,18 @@ export default function App() {
           </Animated.View>
         )}
 
-        {/* Floating Action Button */}
+        {/* Floating Action Buttons */}
         {!loading && !answer && (
-          <View style={[styles.buttonContainer, isLandscape ? { right: 40, bottom: 'auto', top: '50%', transform: [{translateY: -35}] } : { bottom: 50 }]}>
-            <TouchableOpacity style={styles.scanButton} onPress={handleScan} activeOpacity={0.7}>
-              <Ionicons name="scan-outline" size={28} color="#000" />
+          <View style={[styles.bottomControlsContainer, isLandscape ? { right: 40, bottom: 'auto', top: '50%', transform: [{translateY: -70}] } : { bottom: 50 }]}>
+            
+            {/* Zoom Toggle Button */}
+            <TouchableOpacity style={[styles.zoomButton, isLandscape && { marginBottom: 20 }]} onPress={toggleZoom} activeOpacity={0.7}>
+              <Text style={styles.zoomButtonText}>{getZoomLabel()}</Text>
+            </TouchableOpacity>
+
+            {/* Main Scan Button */}
+            <TouchableOpacity style={[styles.scanButton, isLandscape && { width: 70, height: 70, borderRadius: 35, paddingHorizontal: 0, justifyContent: 'center' }]} onPress={handleScan} activeOpacity={0.7}>
+              <Ionicons name="scan-outline" size={isLandscape ? 32 : 28} color="#000" />
               {!isLandscape && <Text style={styles.scanButtonText}>Scan & Solve</Text>}
             </TouchableOpacity>
           </View>
@@ -210,7 +231,9 @@ const styles = StyleSheet.create({
   corner: { position: 'absolute', width: 40, height: 40, borderColor: '#00E5FF' },
   scanLine: { width: '100%', height: 2, backgroundColor: '#00E5FF', shadowColor: '#00E5FF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 10, elevation: 5 },
   instructionText: { color: 'rgba(255,255,255,0.8)', fontSize: 16, fontWeight: '500', letterSpacing: 0.5 },
-  buttonContainer: { position: 'absolute', width: '100%', alignItems: 'center', zIndex: 10 },
+  bottomControlsContainer: { position: 'absolute', width: '100%', alignItems: 'center', zIndex: 10, flexDirection: 'column' },
+  zoomButton: { backgroundColor: 'rgba(0,0,0,0.5)', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderWidth: 1, borderColor: '#00E5FF' },
+  zoomButtonText: { color: '#00E5FF', fontWeight: '800', fontSize: 14 },
   scanButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#00E5FF', paddingVertical: 18, paddingHorizontal: 30, borderRadius: 50, shadowColor: '#00E5FF', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.6, shadowRadius: 15, elevation: 8 },
   scanButtonText: { color: '#000', fontSize: 18, fontWeight: '800', marginLeft: 10, letterSpacing: 1 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
