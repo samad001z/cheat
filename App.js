@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, SafeAreaView, useWindowDimensions, Animated, Platform } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, SafeAreaView, useWindowDimensions, Animated, Platform, ScrollView } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
@@ -171,7 +171,7 @@ export default function App() {
           <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFillObject}>
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#00E5FF" />
-              <Text style={styles.loadingText}>Gemini 2.5 Flash Analyzing...</Text>
+              <Text style={styles.loadingText}>Gemini Analyzing...</Text>
             </View>
           </BlurView>
         )}
@@ -180,14 +180,17 @@ export default function App() {
         {answer && (
           <Animated.View style={[
             styles.resultSheetContainer, 
+            isLandscape && { width: '45%', right: 20, left: 'auto', bottom: 20, top: 20, maxHeight: height - 40 },
             { opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [50, 0] }) }] }
           ]}>
-            <BlurView intensity={90} tint="dark" style={styles.resultSheet}>
+            <BlurView intensity={90} tint="dark" style={[styles.resultSheet, isLandscape && { flex: 1 }]}>
               <View style={styles.resultHeader}>
                 <Ionicons name="sparkles" size={20} color="#00E5FF" />
                 <Text style={styles.resultTitle}> AI Solution</Text>
               </View>
-              <Text style={styles.resultText}>{answer}</Text>
+              <ScrollView style={isLandscape && { flex: 1 }} contentContainerStyle={{ paddingBottom: 10 }}>
+                <Text style={styles.resultText}>{answer}</Text>
+              </ScrollView>
               <TouchableOpacity style={styles.clearButton} onPress={clearAnswer}>
                 <Ionicons name="refresh-outline" size={20} color="#fff" />
                 <Text style={styles.clearButtonText}>Scan Another</Text>
@@ -198,7 +201,7 @@ export default function App() {
 
         {/* Floating Action Buttons */}
         {!loading && !answer && (
-          <View style={[styles.bottomControlsContainer, isLandscape ? { right: 40, bottom: 'auto', top: '50%', transform: [{translateY: -70}] } : { bottom: 50 }]}>
+          <View style={[styles.bottomControlsContainer, isLandscape ? { right: 40, width: 'auto', bottom: 'auto', top: '50%', transform: [{translateY: -70}] } : { bottom: 50, width: '100%' }]}>
             
             {/* Zoom Toggle Button */}
             <TouchableOpacity style={[styles.zoomButton, isLandscape && { marginBottom: 20 }]} onPress={toggleZoom} activeOpacity={0.7}>

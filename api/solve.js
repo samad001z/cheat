@@ -44,7 +44,6 @@ export default async function handler(req, res) {
     }
 
     const genAI = new GoogleGenerativeAI(API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const prompt = "You are an expert academic solver specializing in Computer Science (OS, CN, DBMS), Aptitude, and Logical Reasoning. Analyze the image provided. If it contains a question or an MCQ: 1. Carefully extract the exact text of the question and the options. 2. Silently work through the logic, mathematical derivation, or technical facts required to solve it. 3. Double-check your reasoning for common trick questions. 4. Output ONLY the final correct option/answer and a very brief (1 sentence) justification. Do not output your internal reasoning steps. Format the output cleanly.";
 
@@ -60,11 +59,24 @@ export default async function handler(req, res) {
       }
     ];
 
-    const result = await model.generateContent([prompt, ...imageParts]);
-    const response = await result.response;
-    const text = response.text();
+    const modelsToTry = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-pro"];
+    let lastError = null;
 
-    res.status(200).json({ answer: text });
+    for (const modelName of modelsToTry) {
+      try {
+        const model = genAI.getGenerativeModel({ model: modelName });
+        const result = await model.generateContent([prompt, ...imageParts]);
+        const response = await result.response;
+        const text = response.text();
+        return res.status(200).json({ answer: text, modelUsed: modelName });
+      } catch (err) {
+        console.error(`Error with model ${modelName}:`, err.message);
+        lastError = err;
+        // Continue to the next model if it's a 503 or 429
+      }
+    }
+
+    throw lastError; // If all models fail, throw the last error
   } catch (error) {
     console.error("Server API Error:", error);
     res.status(500).json({ error: `Server error: ${error.message}` });
