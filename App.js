@@ -1,6 +1,9 @@
-import { useState, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, SafeAreaView, useWindowDimensions } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, SafeAreaView, useWindowDimensions, Animated, Platform } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { BlurView } from 'expo-blur';
+import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 import { solveMCQ } from './geminiService';
 
 export default function App() {
@@ -10,11 +13,62 @@ export default function App() {
   const [answer, setAnswer] = useState(null);
   const cameraRef = useRef(null);
 
+  // Animations
+  const scanLineAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  // Determine if landscape
+  const isLandscape = width > height;
+
+  // Responsive scan box dimensions
+  const scanBoxWidth = isLandscape ? width * 0.6 : width * 0.85;
+  const scanBoxHeight = isLandscape ? height * 0.6 : height * 0.35;
+
+  useEffect(() => {
+    // Start scanning line animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(scanLineAnim, {
+          toValue: scanBoxHeight - 4, // move to bottom
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scanLineAnim, {
+          toValue: 0, // move to top
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [scanBoxHeight, scanLineAnim]);
+
+  useEffect(() => {
+    // Fade in results card
+    if (answer) {
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }).start();
+      triggerHaptic('success');
+    } else {
+      fadeAnim.setValue(0);
+    }
+  }, [answer, fadeAnim]);
+
+  const triggerHaptic = (type) => {
+    if (Platform.OS !== 'web') {
+      if (type === 'heavy') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      if (type === 'success') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (type === 'error') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  };
+
   // Still checking/loading permissions
   if (!permission) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#4F8EF7" />
+        <ActivityIndicator size="large" color="#00E5FF" />
       </View>
     );
   }
@@ -23,29 +77,32 @@ export default function App() {
   if (!permission.granted) {
     return (
       <View style={styles.permissionContainer}>
-        <Text style={styles.permissionText}>We need your permission to use the camera to scan MCQs.</Text>
+        <Ionicons name="camera-outline" size={64} color="#00E5FF" style={{ marginBottom: 20 }} />
+        <Text style={styles.permissionTitle}>Camera Access</Text>
+        <Text style={styles.permissionText}>We need your permission to use the camera for intelligent MCQ scanning.</Text>
         <TouchableOpacity style={styles.grantButton} onPress={requestPermission}>
-          <Text style={styles.grantButtonText}>Grant Camera Access</Text>
+          <Text style={styles.grantButtonText}>Grant Access</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
   const handleScan = async () => {
-    if (cameraRef.current) {
+    if (cameraRef.current && !loading) {
+      triggerHaptic('heavy');
       setLoading(true);
       try {
-        // Capture frame as base64
         const photo = await cameraRef.current.takePictureAsync({
           base64: true,
-          quality: 0.5, // Reduced from 1 to prevent Vercel 4.5MB payload limit errors
+          quality: 0.5, 
         });
         
-        // Pass base64 image to Gemini Service
         const result = await solveMCQ(photo.base64);
         setAnswer(result);
       } catch (error) {
+        triggerHaptic('error');
         alert(error.message || "An error occurred during analysis.");
+        setLoading(false);
       } finally {
         setLoading(false);
       }
@@ -53,43 +110,84 @@ export default function App() {
   };
 
   const clearAnswer = () => {
+    triggerHaptic('heavy');
     setAnswer(null);
   };
+
+  // Scanner Corners UI Component
+  const Corner = ({ top, bottom, left, right }) => (
+    <View style={[
+      styles.corner, 
+      top !== undefined && { top: -2, borderTopWidth: 4 },
+      bottom !== undefined && { bottom: -2, borderBottomWidth: 4 },
+      left !== undefined && { left: -2, borderLeftWidth: 4 },
+      right !== undefined && { right: -2, borderRightWidth: 4 },
+    ]} />
+  );
 
   return (
     <SafeAreaView style={styles.container}>
       <CameraView style={styles.camera} facing="back" autofocus="on" ref={cameraRef}>
         
-        {/* Scanning Area Visualizer */}
-        <View style={styles.overlay}>
-          <View style={[styles.scanBox, { width: width * 0.85, height: height * 0.35 }]} />
-          <Text style={styles.instructionText}>Position the MCQ inside the frame</Text>
+        {/* Darkened Overlay around the Scan Box */}
+        <View style={styles.overlayContainer}>
+          <View style={[styles.darkOverlay, { height: (height - scanBoxHeight) / 2 }]} />
+          <View style={{ flexDirection: 'row', height: scanBoxHeight }}>
+            <View style={[styles.darkOverlay, { width: (width - scanBoxWidth) / 2 }]} />
+            
+            {/* The Transparent Scan Box */}
+            <View style={{ width: scanBoxWidth, height: scanBoxHeight, position: 'relative' }}>
+              <Corner top left />
+              <Corner top right />
+              <Corner bottom left />
+              <Corner bottom right />
+              
+              <Animated.View style={[styles.scanLine, { transform: [{ translateY: scanLineAnim }] }]} />
+            </View>
+            
+            <View style={[styles.darkOverlay, { width: (width - scanBoxWidth) / 2 }]} />
+          </View>
+          <View style={[styles.darkOverlay, { height: (height - scanBoxHeight) / 2, alignItems: 'center', paddingTop: 20 }]}>
+             <Text style={styles.instructionText}>Align the MCQ within the brackets</Text>
+          </View>
         </View>
 
-        {/* Loading State Overlay */}
+        {/* Loading Glassmorphism Overlay */}
         {loading && (
-          <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color="#ffffff" />
-            <Text style={styles.loadingText}>Analyzing logic...</Text>
-          </View>
+          <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFillObject}>
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#00E5FF" />
+              <Text style={styles.loadingText}>Gemini 2.5 Flash Analyzing...</Text>
+            </View>
+          </BlurView>
         )}
 
-        {/* Bottom Results Sheet */}
+        {/* Premium Animated Results Sheet */}
         {answer && (
-          <View style={styles.resultSheet}>
-            <Text style={styles.resultTitle}>Analysis Complete</Text>
-            <Text style={styles.resultText}>{answer}</Text>
-            <TouchableOpacity style={styles.clearButton} onPress={clearAnswer}>
-              <Text style={styles.clearButtonText}>Clear / Next Question</Text>
-            </TouchableOpacity>
-          </View>
+          <Animated.View style={[
+            styles.resultSheetContainer, 
+            { opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [50, 0] }) }] }
+          ]}>
+            <BlurView intensity={90} tint="dark" style={styles.resultSheet}>
+              <View style={styles.resultHeader}>
+                <Ionicons name="sparkles" size={20} color="#00E5FF" />
+                <Text style={styles.resultTitle}> AI Solution</Text>
+              </View>
+              <Text style={styles.resultText}>{answer}</Text>
+              <TouchableOpacity style={styles.clearButton} onPress={clearAnswer}>
+                <Ionicons name="refresh-outline" size={20} color="#fff" />
+                <Text style={styles.clearButtonText}>Scan Another</Text>
+              </TouchableOpacity>
+            </BlurView>
+          </Animated.View>
         )}
 
-        {/* Action Button */}
+        {/* Floating Action Button */}
         {!loading && !answer && (
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.scanButton} onPress={handleScan}>
-              <Text style={styles.scanButtonText}>Scan & Solve</Text>
+          <View style={[styles.buttonContainer, isLandscape ? { right: 40, bottom: 'auto', top: '50%', transform: [{translateY: -35}] } : { bottom: 50 }]}>
+            <TouchableOpacity style={styles.scanButton} onPress={handleScan} activeOpacity={0.7}>
+              <Ionicons name="scan-outline" size={28} color="#000" />
+              {!isLandscape && <Text style={styles.scanButtonText}>Scan & Solve</Text>}
             </TouchableOpacity>
           </View>
         )}
@@ -100,136 +198,28 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000', // Dark mode background
-    justifyContent: 'center',
-  },
-  permissionContainer: {
-    flex: 1,
-    backgroundColor: '#121212',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  permissionText: {
-    color: '#fff',
-    fontSize: 18,
-    textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 24,
-  },
-  grantButton: {
-    backgroundColor: '#4F8EF7',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-  },
-  grantButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  camera: {
-    flex: 1,
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scanBox: {
-    borderWidth: 2,
-    borderColor: '#4F8EF7',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 16,
-    marginBottom: 20,
-  },
-  instructionText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '500',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: -1, height: 1 },
-    textShadowRadius: 10,
-  },
-  buttonContainer: {
-    position: 'absolute',
-    bottom: 50,
-    width: '100%',
-    alignItems: 'center',
-  },
-  scanButton: {
-    backgroundColor: '#4F8EF7',
-    paddingVertical: 18,
-    paddingHorizontal: 40,
-    borderRadius: 30,
-    shadowColor: '#4F8EF7',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  scanButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  loadingText: {
-    color: '#fff',
-    marginTop: 16,
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  resultSheet: {
-    position: 'absolute',
-    bottom: 0,
-    width: '100%',
-    backgroundColor: 'rgba(25, 25, 25, 0.95)',
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    padding: 30,
-    paddingBottom: 50,
-    zIndex: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -5 },
-    shadowOpacity: 0.5,
-    shadowRadius: 15,
-    elevation: 10,
-  },
-  resultTitle: {
-    color: '#4F8EF7',
-    fontSize: 14,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 12,
-  },
-  resultText: {
-    color: '#ffffff',
-    fontSize: 18,
-    lineHeight: 26,
-    marginBottom: 24,
-  },
-  clearButton: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-  },
-  clearButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 16,
-  },
+  container: { flex: 1, backgroundColor: '#000' },
+  permissionContainer: { flex: 1, backgroundColor: '#0A0A0A', justifyContent: 'center', alignItems: 'center', padding: 30 },
+  permissionTitle: { color: '#fff', fontSize: 28, fontWeight: '800', marginBottom: 15, letterSpacing: 1 },
+  permissionText: { color: '#A0A0A0', fontSize: 16, textAlign: 'center', marginBottom: 40, lineHeight: 24 },
+  grantButton: { backgroundColor: '#00E5FF', paddingVertical: 16, paddingHorizontal: 40, borderRadius: 30, shadowColor: '#00E5FF', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 10 },
+  grantButtonText: { color: '#000', fontWeight: '800', fontSize: 16, textTransform: 'uppercase', letterSpacing: 1 },
+  camera: { flex: 1 },
+  overlayContainer: { ...StyleSheet.absoluteFillObject },
+  darkOverlay: { backgroundColor: 'rgba(0,0,0,0.6)' },
+  corner: { position: 'absolute', width: 40, height: 40, borderColor: '#00E5FF' },
+  scanLine: { width: '100%', height: 2, backgroundColor: '#00E5FF', shadowColor: '#00E5FF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 10, elevation: 5 },
+  instructionText: { color: 'rgba(255,255,255,0.8)', fontSize: 16, fontWeight: '500', letterSpacing: 0.5 },
+  buttonContainer: { position: 'absolute', width: '100%', alignItems: 'center', zIndex: 10 },
+  scanButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#00E5FF', paddingVertical: 18, paddingHorizontal: 30, borderRadius: 50, shadowColor: '#00E5FF', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.6, shadowRadius: 15, elevation: 8 },
+  scanButtonText: { color: '#000', fontSize: 18, fontWeight: '800', marginLeft: 10, letterSpacing: 1 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { color: '#00E5FF', marginTop: 20, fontSize: 18, fontWeight: '700', letterSpacing: 1 },
+  resultSheetContainer: { position: 'absolute', bottom: 30, left: 20, right: 20, zIndex: 20 },
+  resultSheet: { borderRadius: 24, padding: 25, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  resultHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
+  resultTitle: { color: '#00E5FF', fontSize: 14, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 2 },
+  resultText: { color: '#ffffff', fontSize: 18, lineHeight: 28, marginBottom: 25, fontWeight: '500' },
+  clearButton: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.15)', paddingVertical: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  clearButtonText: { color: '#fff', fontWeight: '700', fontSize: 16, marginLeft: 8 },
 });
