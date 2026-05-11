@@ -1,11 +1,10 @@
 import { useState, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, SafeAreaView, Dimensions } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, SafeAreaView, useWindowDimensions } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { solveMCQ } from './geminiService';
 
-const { width } = Dimensions.get('window');
-
 export default function App() {
+  const { width, height } = useWindowDimensions();
   const [permission, requestPermission] = useCameraPermissions();
   const [loading, setLoading] = useState(false);
   const [answer, setAnswer] = useState(null);
@@ -63,7 +62,7 @@ export default function App() {
         
         {/* Scanning Area Visualizer */}
         <View style={styles.overlay}>
-          <View style={styles.scanBox} />
+          <View style={[styles.scanBox, { width: width * 0.85, height: height * 0.35 }]} />
           <Text style={styles.instructionText}>Position the MCQ inside the frame</Text>
         </View>
 
@@ -140,8 +139,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scanBox: {
-    width: width * 0.85,
-    height: 250,
     borderWidth: 2,
     borderColor: '#4F8EF7',
     backgroundColor: 'rgba(255,255,255,0.05)',
