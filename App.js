@@ -39,7 +39,7 @@ export default function App() {
         // Capture frame as base64
         const photo = await cameraRef.current.takePictureAsync({
           base64: true,
-          quality: 0.7, // Optimized for speed and sufficient API clarity
+          quality: 1, // Maximum quality for best text recognition
         });
         
         // Pass base64 image to Gemini Service
@@ -59,7 +59,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <CameraView style={styles.camera} facing="back" ref={cameraRef}>
+      <CameraView style={styles.camera} facing="back" autofocus="on" ref={cameraRef}>
         
         {/* Scanning Area Visualizer */}
         <View style={styles.overlay}>
