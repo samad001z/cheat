@@ -38,7 +38,7 @@ export default function App() {
         // Capture frame as base64
         const photo = await cameraRef.current.takePictureAsync({
           base64: true,
-          quality: 1, // Maximum quality for best text recognition
+          quality: 0.5, // Reduced from 1 to prevent Vercel 4.5MB payload limit errors
         });
         
         // Pass base64 image to Gemini Service

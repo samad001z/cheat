@@ -1,5 +1,13 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '4mb',
+    },
+  },
+};
+
 export default async function handler(req, res) {
   // Allow CORS for local development and your Vercel deployment
   res.setHeader('Access-Control-Allow-Credentials', true);
@@ -40,10 +48,13 @@ export default async function handler(req, res) {
 
     const prompt = "You are an expert academic solver specializing in Computer Science (OS, CN, DBMS), Aptitude, and Logical Reasoning. Analyze the image provided. If it contains a question or an MCQ: 1. Carefully extract the exact text of the question and the options. 2. Silently work through the logic, mathematical derivation, or technical facts required to solve it. 3. Double-check your reasoning for common trick questions. 4. Output ONLY the final correct option/answer and a very brief (1 sentence) justification. Do not output your internal reasoning steps. Format the output cleanly.";
 
+    // Strip the data URI prefix (e.g., 'data:image/jpeg;base64,') if it exists (common on web)
+    const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg);base64,/, "");
+
     const imageParts = [
       {
         inlineData: {
-          data: base64Image,
+          data: cleanBase64,
           mimeType: "image/jpeg"
         }
       }
@@ -56,6 +67,6 @@ export default async function handler(req, res) {
     res.status(200).json({ answer: text });
   } catch (error) {
     console.error("Server API Error:", error);
-    res.status(500).json({ error: 'Failed to analyze image on server.' });
+    res.status(500).json({ error: `Server error: ${error.message}` });
   }
 }
